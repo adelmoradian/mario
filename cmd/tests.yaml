@@ -1,0 +1,115 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: task-a
+spec:
+  workspaces:
+    - name: ws-a-1
+    - name: ws-a-2
+      optional: true
+    - name: ws-a-optional
+      optional: true
+    - name: ws-a-not-given
+  params:
+    - name: param1
+      default: param1
+    - name: param2
+      type: array
+    - name: param-not-given
+  steps:
+    - image: ubuntu
+      script: echo 'hello there'
+
+---
+
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: task-finally
+spec:
+  workspaces:
+    - name: ws-a-1
+    - name: ws-a-2
+      optional: true
+    - name: ws-a-optional
+      optional: true
+    - name: ws-a-not-needed
+  params:
+    - name: param-finally
+      default: param-finally
+    - name: param-not-give
+  steps:
+    - image: ubuntu
+      script: echo 'hello there'
+
+---
+
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: test-pipeline
+spec:
+  workspaces:
+    - name: ws1
+    - name: ws-no-needed
+    - name: ws2
+      optional: true
+  params:
+    - name: param1
+    - name: param2
+      default: "param2-default"
+      type: string
+    - name: param3
+      type: array
+      default: ["param3-1", "param3-2"]
+    - name: param4
+    - name: param-finally
+    - name: param-not-needed
+  tasks:
+    - name: task-a
+      taskRef:
+        name: task-a
+      params:
+        - name: param1
+          value: $(params.param1)
+        - name: param2
+          value: $(params.param2)
+      workspaces:
+        - name: ws-a-1
+          workspace: ws1
+        - name: ws-a-2
+          workspace: ws2
+    - name: task-b
+      taskRef:
+        kind: ClusterTask
+        name: task-b
+      workspaces:
+        - name: ws-b-1
+          workspace: ws1
+      params:
+        - name: param3
+          value: ["$(params.param3)"]
+    - name: task-c
+      runAfter:
+        - task-a
+        - task-b
+      params:
+        - name: param4
+          value: $(params.param4)
+      taskSpec:
+        params:
+          - name: param4
+        steps:
+          - image: ubuntu
+            script: echo 'hello there'
+  finally:
+  - name: task-finally
+    params:
+    - name: param-finally
+      value: $(params.param-finally)
+    taskRef:
+      name: task-finally
+    workspaces:
+    - name: ws-finally
+      workspace: ws1
+
