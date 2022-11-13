@@ -32,6 +32,13 @@ type ValidateWorkspacesTestCases struct {
 	want          error
 }
 
+type WarningsTestCases struct {
+	name          string
+	cTasks        []extendedTask
+	cClusterTasks []extendedClusterTask
+	want          error
+}
+
 var (
 	yPipeline = `---
 apiVersion: tekton.dev/v1beta1
@@ -266,17 +273,7 @@ func TestValidateParams(t *testing.T) {
 	for _, tc := range validateParamsTests {
 		t.Run(tc.name, func(t *testing.T) {
 			got := tPipeline.ValidateParams(tc.cTasks, tc.cClusterTasks)
-			if got == nil && tc.want != nil {
-				t.Errorf("\nwanted the following error: %s\nbut did not get any error", tc.want)
-			}
-			if got != nil {
-				if tc.want == nil {
-					t.Errorf("\ndid not expect error but got the following error: %s", got)
-				}
-				if tc.want.Error() != got.Error() {
-					t.Errorf("\ngot error: %v\nbut wanted: %v", got.Error(), tc.want)
-				}
-			}
+			assertion(t, got, tc.want)
 		})
 	}
 }
@@ -364,18 +361,81 @@ func TestValidateWorkspaces(t *testing.T) {
 	for _, tc := range validateWorkspaceTests {
 		t.Run(tc.name, func(t *testing.T) {
 			got := tPipeline.ValidateWorkspaces(tc.cTasks, tc.cClusterTasks)
-			if got == nil && tc.want != nil {
-				t.Errorf("\nwanted the following error: %s\nbut did not get any error", tc.want)
-			}
-			if got != nil {
-				if tc.want == nil {
-					t.Errorf("\ndid not expect error but got the following error: %s", got)
-				}
-				if tc.want.Error() != got.Error() {
-					t.Errorf("\ngot error: %v\nbut wanted: %v", got.Error(), tc.want)
-				}
-			}
+			assertion(t, got, tc.want)
 		})
+	}
+}
+
+func TestWarnings(t *testing.T) {
+	tPipeline := setupPipeline(yPipeline)
+
+	warningsTests := []WarningsTestCases{
+		{
+			name: "pipeline has no warnings",
+			want: nil,
+			cTasks: []extendedTask{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "task-a"},
+					Spec: tknv1beta1.TaskSpec{
+						Params: []tknv1beta1.ParamSpec{
+							{Name: "param1"},
+							{Name: "param2"},
+							{Name: "param-not-needed"},
+						},
+						Workspaces: []tknv1beta1.WorkspaceDeclaration{
+							{Name: "ws-a-1"},
+							{Name: "ws-no-needed"},
+							{Name: "ws-a-2", Optional: true},
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "task-finally"},
+					Spec: tknv1beta1.TaskSpec{
+						Params: []tknv1beta1.ParamSpec{
+							{Name: "param-finally"},
+						},
+						Workspaces: []tknv1beta1.WorkspaceDeclaration{
+							{Name: "ws-finally"},
+						},
+					},
+				},
+			},
+			cClusterTasks: []extendedClusterTask{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "task-b"},
+					Spec: tknv1beta1.TaskSpec{
+						Params: []tknv1beta1.ParamSpec{
+							{Name: "param3"},
+						},
+						Workspaces: []tknv1beta1.WorkspaceDeclaration{
+							{Name: "ws-b-1"},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	for _, tc := range warningsTests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := tPipeline.Warnings(tc.cTasks, tc.cClusterTasks)
+			assertion(t, got, tc.want)
+		})
+	}
+}
+
+func assertion(t *testing.T, got, want error) {
+	if got == nil && want != nil {
+		t.Errorf("\nwanted the following error: %s\nbut did not get any error", want)
+	}
+	if got != nil {
+		if want == nil {
+			t.Errorf("\ndid not expect error but got the following error: %s", got)
+		}
+		if want.Error() != got.Error() {
+			t.Errorf("\ngot error: %v\nbut wanted: %v", got.Error(), want)
+		}
 	}
 }
 

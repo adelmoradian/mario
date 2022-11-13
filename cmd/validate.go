@@ -227,6 +227,10 @@ func (p *extendedPipeline) ValidateWorkspaces(cTasks []extendedTask, cClusterTas
 	return nil
 }
 
+func (p *extendedPipeline) Warnings(cTasks []extendedTask, cClusterTasks []extendedClusterTask) error {
+	return nil
+}
+
 // Returns all the parameters that are required by a given pipelineTask.
 // It does not include parameters that have a default value. The reason is that
 // spec.param of a pipeline doesn't need to have the task params that have default value.
