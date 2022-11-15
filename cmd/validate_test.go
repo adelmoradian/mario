@@ -32,13 +32,6 @@ type ValidateWorkspacesTestCases struct {
 	want          error
 }
 
-type WarningsTestCases struct {
-	name          string
-	cTasks        []extendedTask
-	cClusterTasks []extendedClusterTask
-	want          error
-}
-
 var (
 	yPipeline = `---
 apiVersion: tekton.dev/v1beta1
@@ -280,8 +273,7 @@ func TestValidateParams(t *testing.T) {
 
 // spec.tasks[*].workspaces and spec.finally[*].workspaces must cover all the task
 // workspaces that do not have a default value.
-// In this case we are ignoring optional workspaces
-// because they should generate warning and not error
+// We ignore optional workspaces
 func TestValidateWorkspaces(t *testing.T) {
 	tPipeline := setupPipeline(yPipeline)
 
@@ -361,65 +353,6 @@ func TestValidateWorkspaces(t *testing.T) {
 	for _, tc := range validateWorkspaceTests {
 		t.Run(tc.name, func(t *testing.T) {
 			got := tPipeline.ValidateWorkspaces(tc.cTasks, tc.cClusterTasks)
-			assertion(t, got, tc.want)
-		})
-	}
-}
-
-func TestWarnings(t *testing.T) {
-	tPipeline := setupPipeline(yPipeline)
-
-	warningsTests := []WarningsTestCases{
-		{
-			name: "pipeline has no warnings",
-			want: nil,
-			cTasks: []extendedTask{
-				{
-					ObjectMeta: metav1.ObjectMeta{Name: "task-a"},
-					Spec: tknv1beta1.TaskSpec{
-						Params: []tknv1beta1.ParamSpec{
-							{Name: "param1"},
-							{Name: "param2"},
-							{Name: "param-not-needed"},
-						},
-						Workspaces: []tknv1beta1.WorkspaceDeclaration{
-							{Name: "ws-a-1"},
-							{Name: "ws-no-needed"},
-							{Name: "ws-a-2", Optional: true},
-						},
-					},
-				},
-				{
-					ObjectMeta: metav1.ObjectMeta{Name: "task-finally"},
-					Spec: tknv1beta1.TaskSpec{
-						Params: []tknv1beta1.ParamSpec{
-							{Name: "param-finally"},
-						},
-						Workspaces: []tknv1beta1.WorkspaceDeclaration{
-							{Name: "ws-finally"},
-						},
-					},
-				},
-			},
-			cClusterTasks: []extendedClusterTask{
-				{
-					ObjectMeta: metav1.ObjectMeta{Name: "task-b"},
-					Spec: tknv1beta1.TaskSpec{
-						Params: []tknv1beta1.ParamSpec{
-							{Name: "param3"},
-						},
-						Workspaces: []tknv1beta1.WorkspaceDeclaration{
-							{Name: "ws-b-1"},
-						},
-					},
-				},
-			},
-		},
-	}
-
-	for _, tc := range warningsTests {
-		t.Run(tc.name, func(t *testing.T) {
-			got := tPipeline.Warnings(tc.cTasks, tc.cClusterTasks)
 			assertion(t, got, tc.want)
 		})
 	}
