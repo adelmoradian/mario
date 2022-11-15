@@ -24,15 +24,11 @@ spec:
       taskRef:
         name: task-a
       params:
-        - name: param1
+        - name: param-a
           value: $(params.param1)
-        - name: param2
-          value: $(params.param2)
       workspaces:
         - name: ws-a-1
           workspace: ws1
-        - name: ws-a-2
-          workspace: ws2
     - name: task-b
       taskRef:
         kind: ClusterTask
@@ -58,12 +54,9 @@ spec:
             script: echo 'hello there'
   finally:
   - name: task-finally
-    params:
-    - name: param-finally
-      value: $(params.param-finally)
     taskRef:
       name: task-finally
     workspaces:
-    - name: ws-finally
+    - name: ws-finally-1
       workspace: ws1
 

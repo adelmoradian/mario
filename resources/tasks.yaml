@@ -5,17 +5,17 @@ metadata:
 spec:
   workspaces:
     - name: ws-a-1
-    - name: ws-a-2
+    - name: ws-a-1-optional-1
       optional: true
-    - name: ws-a-optional
+    - name: ws-a-optional-2
       optional: true
-    - name: ws-a-not-given
+    - name: ws-a-missed
   params:
-    - name: param1
+    - name: param-a-with-default
       default: param1
-    - name: param2
+    - name: param-a
       type: array
-    - name: param-not-given
+    - name: param-a-missed
   steps:
     - image: ubuntu
       script: echo 'hello there'
@@ -28,16 +28,16 @@ metadata:
   name: task-finally
 spec:
   workspaces:
-    - name: ws-a-1
-    - name: ws-a-2
+    - name: ws-finally-1
+    - name: ws-finally-optional-1
       optional: true
-    - name: ws-a-optional
+    - name: ws-finally-optional-2
       optional: true
-    - name: ws-a-not-needed
+    - name: ws-finally-missed
   params:
-    - name: param-finally
+    - name: param-finally-with-default
       default: param-finally
-    - name: param-not-give
+    - name: param-finally-missed
   steps:
     - image: ubuntu
       script: echo 'hello there'
