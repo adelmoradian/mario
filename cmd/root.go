@@ -12,7 +12,7 @@ import (
 	"k8s.io/client-go/util/homedir"
 )
 
-var kubeConfig string
+var kubeconfig string
 
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -43,9 +43,9 @@ func init() {
 	// Cobra supports persistent flags, which, if defined here,
 	// will be global for your application.
 
-	rootCmd.PersistentFlags().StringVarP(&kubeConfig, "kube-config", "k", filepath.Join(homedir.HomeDir(), ".kube", "config"), "Path to kubeconfig (default is $HOME/.kube/config)")
+	rootCmd.PersistentFlags().StringVarP(&kubeconfig, "kubeconfig", "k", filepath.Join(homedir.HomeDir(), ".kube", "config"), "Path to kubeconfig (default is $HOME/.kube/config)")
 
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
-	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	// rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
 }

@@ -1,0 +1,43 @@
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: task-a
+spec:
+  workspaces:
+    - name: ws-a-1
+    - name: ws-a-2
+      optional: true
+    - name: ws-a-optional
+      optional: true
+    - name: ws-a-not-given
+  params:
+    - name: param1
+      default: param1
+    - name: param2
+      type: array
+    - name: param-not-given
+  steps:
+    - image: ubuntu
+      script: echo 'hello there'
+
+---
+
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: task-finally
+spec:
+  workspaces:
+    - name: ws-a-1
+    - name: ws-a-2
+      optional: true
+    - name: ws-a-optional
+      optional: true
+    - name: ws-a-not-needed
+  params:
+    - name: param-finally
+      default: param-finally
+    - name: param-not-give
+  steps:
+    - image: ubuntu
+      script: echo 'hello there'

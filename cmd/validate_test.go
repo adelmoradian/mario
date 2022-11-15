@@ -6,9 +6,6 @@ import (
 
 	tknv1beta1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/util/yaml"
 )
 
 type ValidateTaskRefsTestCases struct {
@@ -112,7 +109,7 @@ spec:
 // tasksRef must refer to tasks or clusterTasks that exist in cluster.
 // validate tasks in spec.tasks and spec.finally
 func TestValidateTaskRefs(t *testing.T) {
-	tPipeline := setupPipeline(yPipeline)
+	tPipeline := setupPipeline([]byte(yPipeline))
 
 	validateTaskRefsTests := []ValidateTaskRefsTestCases{
 		{
@@ -183,7 +180,7 @@ func TestValidateTaskRefs(t *testing.T) {
 // spec.tasks[*].params and spec.finally[*].params must cover all the task
 // params that do not have a default value
 func TestValidateParams(t *testing.T) {
-	tPipeline := setupPipeline(yPipeline)
+	tPipeline := setupPipeline([]byte(yPipeline))
 
 	validateParamsTests := []ValidateParamsTestCases{
 		{
@@ -275,7 +272,7 @@ func TestValidateParams(t *testing.T) {
 // workspaces that do not have a default value.
 // We ignore optional workspaces
 func TestValidateWorkspaces(t *testing.T) {
-	tPipeline := setupPipeline(yPipeline)
+	tPipeline := setupPipeline([]byte(yPipeline))
 
 	validateWorkspaceTests := []ValidateWorkspacesTestCases{
 		{
@@ -370,28 +367,4 @@ func assertion(t *testing.T, got, want error) {
 			t.Errorf("\ngot error: %v\nbut wanted: %v", got.Error(), want)
 		}
 	}
-}
-
-func setupPipeline(s string) (tPipeline extendedPipeline) {
-	jPipeline, err := yaml.ToJSON([]byte(s))
-	if err != nil {
-		panic(err.Error())
-	}
-
-	object, err := runtime.Decode(unstructured.UnstructuredJSONScheme, jPipeline)
-	if err != nil {
-		panic(err.Error())
-	}
-
-	uPipeline, ok := object.(*unstructured.Unstructured)
-	if !ok {
-		panic("unstructured.Unstructured expected")
-	}
-
-	err = runtime.DefaultUnstructuredConverter.FromUnstructured(uPipeline.Object, &tPipeline)
-	if err != nil {
-		panic(err.Error())
-	}
-
-	return tPipeline
 }

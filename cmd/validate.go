@@ -7,13 +7,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/ioutil"
+	"log"
 	"sort"
 
 	"github.com/spf13/cobra"
 	tknv1beta1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/util/yaml"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/tools/clientcmd"
 )
@@ -39,11 +43,13 @@ func (ect extendedClusterTask) getWorkspaces() []tknv1beta1.WorkspaceDeclaration
 }
 
 var (
-	normal = "\033[0m"
-	bold   = "\033[1m"
-	red    = "\033[31m"
-	green  = "\033[32m"
-	yellow = "\033[33m"
+	eClusterTasks []extendedClusterTask
+	pipelineFile  string
+	normal        = "\033[0m"
+	bold          = "\033[1m"
+	red           = "\033[31m"
+	green         = "\033[32m"
+	yellow        = "\033[33m"
 )
 
 var validateCmd = &cobra.Command{
@@ -55,19 +61,11 @@ var validateCmd = &cobra.Command{
 	- task params that don't have default value must be present in pipelines
 	- task workspaces that are not optional must be present in pipeline`,
 	Run: func(cmd *cobra.Command, args []string) {
-		var eClusterTasks []extendedClusterTask
-		var eTasks []extendedTask
-		client := GetDynamicClient(kubeConfig)
-
-		pipelines, err := client.Resource(schema.GroupVersionResource{Group: "tekton.dev", Version: "v1beta1", Resource: "pipelines"}).List(context.TODO(), v1.ListOptions{})
-		if err != nil {
-			panic(err)
-		}
+		client := GetDynamicClient(kubeconfig)
 		clusterTasks, err := client.Resource(schema.GroupVersionResource{Group: "tekton.dev", Version: "v1beta1", Resource: "clustertasks"}).List(context.TODO(), v1.ListOptions{})
 		if err != nil {
 			panic(err)
 		}
-
 		for _, t := range clusterTasks.Items {
 			var eCT extendedClusterTask
 			err = runtime.DefaultUnstructuredConverter.FromUnstructured(t.Object, &eCT)
@@ -77,50 +75,30 @@ var validateCmd = &cobra.Command{
 			eClusterTasks = append(eClusterTasks, eCT)
 		}
 
-		for _, p := range pipelines.Items {
-			errMap := make(map[string]error)
-			ns := p.GetNamespace()
-			tasks, err := client.Resource(schema.GroupVersionResource{Group: "tekton.dev", Version: "v1beta1", Resource: "tasks"}).Namespace(ns).List(context.TODO(), v1.ListOptions{})
-			if err != nil {
-				panic(err)
-			}
-
-			var eP extendedPipeline
-			err = runtime.DefaultUnstructuredConverter.FromUnstructured(p.Object, &eP)
+		if pipelineFile == "" {
+			pipelines, err := client.Resource(schema.GroupVersionResource{Group: "tekton.dev", Version: "v1beta1", Resource: "pipelines"}).List(context.TODO(), v1.ListOptions{})
 			if err != nil {
 				panic(err.Error())
 			}
-
-			for _, t := range tasks.Items {
-				var eT extendedTask
-				err = runtime.DefaultUnstructuredConverter.FromUnstructured(t.Object, &eT)
+			for _, p := range pipelines.Items {
+				var eP extendedPipeline
+				err = runtime.DefaultUnstructuredConverter.FromUnstructured(p.Object, &eP)
 				if err != nil {
 					panic(err.Error())
 				}
-				eTasks = append(eTasks, eT)
+				eTasks := tasksInNamespace(eP.GetNamespace(), client)
+				errMap := runValidations(&eP, eTasks, eClusterTasks)
+				printErrors(errMap, &eP)
 			}
-
-			taskRefErr := eP.ValidateTaskRefs(eTasks, eClusterTasks)
-			if taskRefErr != nil {
-				errMap["taskRef validation"] = taskRefErr
+		} else {
+			file, err := ioutil.ReadFile(pipelineFile)
+			if err != nil {
+				log.Fatal(err)
 			}
-			paramsErr := eP.ValidateParams(eTasks, eClusterTasks)
-			if paramsErr != nil {
-				errMap["parameter validation"] = paramsErr
-			}
-			workspaceErr := eP.ValidateWorkspaces(eTasks, eClusterTasks)
-			if workspaceErr != nil {
-				errMap["workspace validation"] = workspaceErr
-			}
-			if len(errMap) == 0 {
-				fmt.Println(string(green), fmt.Sprintf("%s verified!", p.GetName()), string(normal))
-			} else {
-				fmt.Println(string(yellow), fmt.Sprintf("%s has the following errors", p.GetName()), string(normal))
-				for k, err := range errMap {
-					fmt.Println(string(red), k, "error", string(normal))
-					fmt.Println(err)
-				}
-			}
+			eP := setupPipeline([]byte(file))
+			eTasks := tasksInNamespace(eP.GetNamespace(), client)
+			errMap := runValidations(&eP, eTasks, eClusterTasks)
+			printErrors(errMap, &eP)
 		}
 	},
 }
@@ -136,7 +114,7 @@ func init() {
 
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
-	// validateCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	validateCmd.Flags().StringVarP(&pipelineFile, "pipeline-file", "f", "", "If provided, mario will validate this pipeline only")
 }
 
 // Ensures that all the tasks and clusterTasks which are referred in a pipeline, exist in the cluster.
@@ -327,4 +305,78 @@ func GetDynamicClient(kubeconfig string) dynamic.Interface {
 		panic(err)
 	}
 	return client
+}
+
+// Converts an array bites into a typed pipeline
+func setupPipeline(b []byte) (tPipeline extendedPipeline) {
+	jPipeline, err := yaml.ToJSON(b)
+	if err != nil {
+		panic(err.Error())
+	}
+	object, err := runtime.Decode(unstructured.UnstructuredJSONScheme, jPipeline)
+	if err != nil {
+		panic(err.Error())
+	}
+	uPipeline, ok := object.(*unstructured.Unstructured)
+	if !ok {
+		panic("unstructured.Unstructured expected")
+	}
+	err = runtime.DefaultUnstructuredConverter.FromUnstructured(uPipeline.Object, &tPipeline)
+	if err != nil {
+		panic(err.Error())
+	}
+	if tPipeline.Kind != "Pipeline" {
+		errorMessage := fmt.Sprintf("Expected object of kind Pipeline to be provided by the file but instead got a %s", tPipeline.Kind)
+		panic(errors.New(errorMessage).Error())
+	}
+	return tPipeline
+}
+
+// Gets all the tasks in a given namespace. It returns typed objects
+func tasksInNamespace(ns string, c dynamic.Interface) (eTasks []extendedTask) {
+	tasks, err := c.Resource(schema.GroupVersionResource{Group: "tekton.dev", Version: "v1beta1", Resource: "tasks"}).Namespace(ns).List(context.TODO(), v1.ListOptions{})
+	if err != nil {
+		panic(err)
+	}
+	for _, t := range tasks.Items {
+		var eT extendedTask
+		err = runtime.DefaultUnstructuredConverter.FromUnstructured(t.Object, &eT)
+		if err != nil {
+			panic(err.Error())
+		}
+		eTasks = append(eTasks, eT)
+	}
+	return
+}
+
+// runs the pipeline validations
+func runValidations(eP *extendedPipeline, eTasks []extendedTask, eClusterTasks []extendedClusterTask) map[string]error {
+	errMap := make(map[string]error)
+	taskRefErr := eP.ValidateTaskRefs(eTasks, eClusterTasks)
+	if taskRefErr != nil {
+		errMap["taskRef validation"] = taskRefErr
+	}
+	paramsErr := eP.ValidateParams(eTasks, eClusterTasks)
+	if paramsErr != nil {
+		errMap["parameter validation"] = paramsErr
+	}
+	workspaceErr := eP.ValidateWorkspaces(eTasks, eClusterTasks)
+	if workspaceErr != nil {
+		errMap["workspace validation"] = workspaceErr
+	}
+	return errMap
+}
+
+// prints out the errors
+func printErrors(errMap map[string]error, eP *extendedPipeline) {
+	if len(errMap) == 0 {
+		fmt.Println(string(green), fmt.Sprintf("%s verified!", eP.GetName()), string(normal))
+	} else {
+		fmt.Println(string(yellow), fmt.Sprintf("%s has the following errors", eP.GetName()), string(normal))
+		for k, err := range errMap {
+			fmt.Println(string(red), k, "error", string(normal))
+			fmt.Println(err)
+		}
+	}
+
 }
